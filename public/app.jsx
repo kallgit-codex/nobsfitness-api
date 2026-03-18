@@ -310,7 +310,24 @@ function NoBSFitness() {
 
   function onPhoto(e) {
     const f = e.target.files[0];
-    if (f) { setPhoto(f); setPhotoUrl(URL.createObjectURL(f)); }
+    if (f) {
+      setPhoto(f);
+      // Normalize orientation through canvas for display
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let w = img.naturalWidth, h = img.naturalHeight;
+        const maxDim = 1200;
+        if (w > maxDim || h > maxDim) {
+          const scale = maxDim / Math.max(w, h);
+          w = Math.round(w * scale); h = Math.round(h * scale);
+        }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        setPhotoUrl(canvas.toDataURL("image/jpeg", 0.9));
+      };
+      img.src = URL.createObjectURL(f);
+    }
   }
 
   // ─── Generate Future Self ───
@@ -331,8 +348,30 @@ function NoBSFitness() {
       try {
         setGenProgress(10);
         setGenStatus("Reading your photo...");
-        const reader = new FileReader();
-        const photoBase64 = await new Promise((res, rej) => { reader.onload = () => res(reader.result); reader.onerror = rej; reader.readAsDataURL(photo); });
+
+        // Normalize EXIF orientation by drawing through canvas
+        // This fixes rotated phone photos before sending to Kontext Pro
+        const photoBase64 = await new Promise((res, rej) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            // Cap at 2048px to keep payload reasonable
+            const maxDim = 2048;
+            let w = img.naturalWidth, h = img.naturalHeight;
+            if (w > maxDim || h > maxDim) {
+              const scale = maxDim / Math.max(w, h);
+              w = Math.round(w * scale);
+              h = Math.round(h * scale);
+            }
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, w, h);
+            res(canvas.toDataURL("image/jpeg", 0.92));
+          };
+          img.onerror = rej;
+          img.src = URL.createObjectURL(photo);
+        });
 
         setGenProgress(20);
         setGenStatus("Sending to Flux Kontext Pro...");
